@@ -1,0 +1,15 @@
+--2025-08-04 14:29:07--  http://www.fpdf.org/en/dl.php?v=185
+Resolving www.fpdf.org (www.fpdf.org)... 213.186.33.19
+Connecting to www.fpdf.org (www.fpdf.org)|213.186.33.19|:80... connected.
+HTTP request sent, awaiting response... 301 Moved Permanently
+Location: https://www.fpdf.org/en/dl.php?v=185 [following]
+--2025-08-04 14:29:08--  https://www.fpdf.org/en/dl.php?v=185
+Connecting to www.fpdf.org (www.fpdf.org)|213.186.33.19|:443... connected.
+HTTP request sent, awaiting response... 200 OK
+Length: 19 [text/html]
+Saving to: ‘dl.php?v=185’
+
+dl.php?v=185          0%[                    ]       0  --.-KB/s               dl.php?v=185        100%[===================>]      19  --.-KB/s    in 0s      
+
+2025-08-04 14:29:08 (6.72 MB/s) - ‘dl.php?v=185’ saved [19/19]
+
