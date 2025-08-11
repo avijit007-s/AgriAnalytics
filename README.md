@@ -10,7 +10,7 @@
 ### Step 2: Access the System
 
 1. Open your web browser
-2. Navigate to `http://localhost:3000/AgriAnalytics-main/`
+2. Navigate to `http://localhost:3000/agricultural_analysis/`
 3. Use the following credentials to login:
    - **Username**: admin
    - **Password**: admin123
