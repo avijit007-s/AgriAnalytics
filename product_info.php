@@ -256,7 +256,7 @@ try {
                 </div>
 
                 <div class="form-group" style="grid-column: 1 / -1;">
-                    <button type="submit" class="product-btn">
+                    <button type="submit" class="btn btn-primary">
                         <i class="fas fa-save"></i> <?php echo $edit_product ? 'Update Product' : 'Add Product'; ?>
                     </button>
                     <?php if ($edit_product): ?>
