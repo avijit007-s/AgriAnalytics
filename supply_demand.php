@@ -13,7 +13,7 @@ $years = $conn->query("SELECT DISTINCT year FROM production_history ORDER BY yea
 ?>
 
 <style>
-/* Supply vs Demand Page Specific Styles */
+/* Supply vs Demand Page Specific Styles (unchanged) */
 .supply-demand-page {
     background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
     min-height: calc(100vh - 80px);
@@ -270,7 +270,7 @@ $years = $conn->query("SELECT DISTINCT year FROM production_history ORDER BY yea
     $demand_sql = "SELECT SUM(cd.consumer_purchase_records) as total_demand 
                    FROM consumption_data cd 
                    JOIN production_history ph ON cd.product_id = ph.product_id AND cd.location_id = ph.location_id 
-                   WHERE $where_clause";
+                   WHERE $where_clause AND cd.year = ph.year";
     $stmt = $conn->prepare($demand_sql);
     $stmt->bind_param($param_types, ...$params);
     $stmt->execute();
@@ -461,6 +461,7 @@ $years = $conn->query("SELECT DISTINCT year FROM production_history ORDER BY yea
             <i class="fas fa-chart-bar"></i> Supply vs Demand Comparison by Product
         </h3>
         <canvas id="supplyDemandChart" style="max-height: 400px;"></canvas>
+        <?php if (empty($product_names)) echo "<p style='color: red;'>No chart data available.</p>"; ?>
     </div>
 
     <!-- Detailed Comparison Table -->
@@ -500,7 +501,7 @@ $years = $conn->query("SELECT DISTINCT year FROM production_history ORDER BY yea
                                         p.name as product_name,
                                         l.district_name, l.division_name,
                                         ph.quantity_produced as supply,
-                                        cd.consumer_purchase_records as demand,
+                                        COALESCE(SUM(cd.consumer_purchase_records), 0) as demand,
                                         AVG(pr.wholesale_price) as avg_wholesale,
                                         AVG(pr.retail_price) as avg_retail
                                     FROM production_history ph
@@ -511,12 +512,15 @@ $years = $conn->query("SELECT DISTINCT year FROM production_history ORDER BY yea
                                         AND ph.year = cd.year
                                     LEFT JOIN price_history pr ON ph.product_id = pr.product_id 
                                         AND ph.location_id = pr.location_id 
-                                        AND strftime('%Y', ph.date) = ph.year
+                                        AND YEAR(pr.date) = ph.year
                                     WHERE $where_clause
-                                    GROUP BY ph.production_id, p.name, l.district_name, l.division_name, ph.quantity_produced, cd.consumer_purchase_records
+                                    GROUP BY ph.production_id, p.name, l.district_name, l.division_name
                                     ORDER BY p.name, l.district_name";
                     
                     $stmt = $conn->prepare($detailed_sql);
+                    if ($stmt === false) {
+                        die("Prepare failed: " . $conn->error);
+                    }
                     $stmt->bind_param($param_types, ...$params);
                     $stmt->execute();
                     $result = $stmt->get_result();
@@ -533,7 +537,6 @@ $years = $conn->query("SELECT DISTINCT year FROM production_history ORDER BY yea
                             // Determine status
                             $status_class = 'balanced';
                             $status_text = 'Balanced';
-                            
                             if ($demand > 0) {
                                 $ratio = $supply / $demand;
                                 if ($ratio > 1.2) {
@@ -567,29 +570,12 @@ $years = $conn->query("SELECT DISTINCT year FROM production_history ORDER BY yea
     </div>
 </div>
 
-<script>
-// Initialize search functionality
-searchTable('searchInput', 'comparisonTable');
-
-// Apply filters function
-function applyFilters() {
-    const year = document.getElementById('year').value;
-    const product = document.getElementById('product').value;
-    const location = document.getElementById('location').value;
-    
-    let url = 'supply_demand.php?year=' + year;
-    if (product) url += '&product=' + product;
-    if (location) url += '&location=' + location;
-    
-    window.location.href = url;
-}
-
-// Supply vs Demand Chart
 <?php
+// Prepare chart data
 $chart_sql = "SELECT 
                  p.name as product_name,
                  SUM(ph.quantity_produced) as total_supply,
-                 SUM(cd.consumer_purchase_records) as total_demand
+                 COALESCE(SUM(cd.consumer_purchase_records), 0) as total_demand
              FROM production_history ph
              JOIN products p ON ph.product_id = p.product_id
              LEFT JOIN consumption_data cd ON ph.product_id = cd.product_id 
@@ -616,10 +602,53 @@ while ($row = $chart_result->fetch_assoc()) {
 }
 ?>
 
-const chartCtx = document.getElementById('supplyDemandChart').getContext('2d');
-new Chart(chartCtx, {
-    type: 'bar',
-    data: {
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+<script>
+// Initialize search functionality
+function searchTable(inputId, tableId) {
+    var input = document.getElementById(inputId);
+    var table = document.getElementById(tableId);
+    var tr = table.getElementsByTagName("tr");
+
+    input.addEventListener("keyup", function() {
+        var filter = input.value.toUpperCase();
+        for (var i = 0; i < tr.length; i++) {
+            var td = tr[i].getElementsByTagName("td")[0]; // Search by Product
+            if (td) {
+                var txtValue = td.textContent || td.innerText;
+                if (txtValue.toUpperCase().indexOf(filter) > -1) {
+                    tr[i].style.display = "";
+                } else {
+                    tr[i].style.display = "none";
+                }
+            }
+        }
+    });
+}
+searchTable('searchInput', 'comparisonTable');
+
+// Apply filters function
+function applyFilters() {
+    const year = document.getElementById('year').value;
+    const product = document.getElementById('product').value;
+    const location = document.getElementById('location').value;
+    
+    let url = 'supply_demand.php?year=' + year;
+    if (product) url += '&product=' + product;
+    if (location) url += '&location=' + location;
+    
+    window.location.href = url;
+}
+
+// Supply vs Demand Chart
+document.addEventListener('DOMContentLoaded', function() {
+    const chartCtx = document.getElementById('supplyDemandChart');
+    if (!chartCtx) {
+        console.error('Canvas element with id "supplyDemandChart" not found.');
+        return;
+    }
+
+    const data = {
         labels: <?php echo json_encode($product_names); ?>,
         datasets: [{
             label: 'Supply (tons)',
@@ -634,39 +663,48 @@ new Chart(chartCtx, {
             borderColor: '#e74c3c',
             borderWidth: 2
         }]
-    },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: {
-                display: true,
-                position: 'top'
-            }
-        },
-        scales: {
-            y: {
-                beginAtZero: true,
-                title: {
+    };
+
+    if (data.labels.length === 0) {
+        console.warn('No data available to render the chart.');
+        return;
+    }
+
+    new Chart(chartCtx.getContext('2d'), {
+        type: 'bar',
+        data: data,
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
                     display: true,
-                    text: 'Quantity (tons)'
+                    position: 'top'
                 }
             },
-            x: {
-                title: {
-                    display: true,
-                    text: 'Products'
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    title: {
+                        display: true,
+                        text: 'Quantity (tons)'
+                    }
+                },
+                x: {
+                    title: {
+                        display: true,
+                        text: 'Products'
+                    }
                 }
             }
         }
-    }
+    });
 });
 </script>
 
-
 <button onclick="downloadPDF()" class="pdf-download-btn">
     <i class="fas fa-file-pdf"></i> Download PDF
-</button>
+</script>
 
 <script>
 // Download PDF function
@@ -682,143 +720,3 @@ function downloadPDF() {
 </script>
 
 <?php include 'templates/footer.php'; ?>
-
-
-
-<script>
-function filterTable() {
-    var input, filter, table, tr, td, i, txtValue;
-    input = document.getElementById("searchInput");
-    filter = input.value.toUpperCase();
-    table = document.getElementById("comparisonTable");
-    tr = table.getElementsByTagName("tr");
-    for (i = 0; i < tr.length; i++) {
-        td = tr[i].getElementsByTagName("td")[0]; // Search by Product
-        if (td) {
-            txtValue = td.textContent || td.innerText;
-            if (txtValue.toUpperCase().indexOf(filter) > -1) {
-                tr[i].style.display = "";
-            } else {
-                tr[i].style.display = "none";
-            }
-        }
-    }
-}
-</script>
-
-
-
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-    // Supply vs Demand Comparison by Product Chart
-    var supplyDemandProductCtx = document.getElementById("supplyDemandProductChart").getContext("2d");
-    var supplyDemandProductChart;
-
-    function renderSupplyDemandCharts(data) {
-        // Destroy existing charts if they exist
-        if (supplyDemandProductChart) supplyDemandProductChart.destroy();
-
-        // Process data for Supply vs Demand Comparison by Product Chart
-        var productLabels = [];
-        var supplyData = [];
-        var demandData = [];
-
-        var productMap = {};
-        data.forEach(function(row) {
-            var key = row.product_name + ' - ' + row.district_name;
-            if (!productMap[key]) {
-                productMap[key] = { supply: 0, demand: 0 };
-            }
-            productMap[key].supply += parseFloat(row.supply);
-            productMap[key].demand += parseFloat(row.demand);
-        });
-
-        for (var product in productMap) {
-            productLabels.push(product);
-            supplyData.push(productMap[product].supply);
-            demandData.push(productMap[product].demand);
-        }
-
-        supplyDemandProductChart = new Chart(supplyDemandProductCtx, {
-            type: "bar",
-            data: {
-                labels: productLabels,
-                datasets: [{
-                    label: "Supply (tons)",
-                    data: supplyData,
-                    backgroundColor: "rgba(44, 62, 80, 0.7)",
-                    borderColor: "rgba(44, 62, 80, 1)",
-                    borderWidth: 1,
-                },
-                {
-                    label: "Demand (tons)",
-                    data: demandData,
-                    backgroundColor: "rgba(52, 152, 219, 0.7)",
-                    borderColor: "rgba(52, 152, 219, 1)",
-                    borderWidth: 1,
-                }, ],
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: "top",
-                    },
-                    title: {
-                        display: true,
-                        text: "Supply vs Demand Comparison by Product and Location",
-                    },
-                },
-                scales: {
-                    x: {
-                        stacked: false,
-                        title: {
-                            display: true,
-                            text: "Product and Location",
-                        },
-                    },
-                    y: {
-                        stacked: false,
-                        beginAtZero: true,
-                        title: {
-                            display: true,
-                            text: "Quantity (tons)",
-                        },
-                    },
-                },
-            },
-        });
-    }
-
-    // Fetch data and render charts on page load
-    document.addEventListener("DOMContentLoaded", function() {
-        fetchSupplyDemandData();
-    });
-
-    function fetchSupplyDemandData() {
-        var year = document.getElementById("year").value;
-        var product = document.getElementById("product").value;
-        var location = document.getElementById("location").value;
-
-        var url = `api.php?action=get_supply_demand_data&year=${year}`;
-        if (product) url += `&product=${product}`;
-        if (location) url += `&location=${location}`;
-
-        fetch(url)
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    renderSupplyDemandCharts(data.data);
-                } else {
-                    console.error("Error fetching supply demand data:", data.message);
-                }
-            })
-            .catch(error => console.error("Fetch error:", error));
-    }
-
-    function applyFilters() {
-        fetchSupplyDemandData();
-    }
-</script>
-
