@@ -31,9 +31,9 @@
         <h3>
             <?php
             try {
-                $result = $conn->query("SELECT COUNT(DISTINCT location) as count FROM production");
+                $result = $conn->query("SELECT COUNT(DISTINCT location) as count FROM production_history");
                 $count = $result->fetch_assoc()['count'];
-                echo $count;
+                echo $count ? $count : "0";
             } catch (Exception $e) {
                 echo "0";
             }
@@ -49,9 +49,9 @@
         <h3>
             <?php
             try {
-                $result = $conn->query("SELECT COUNT(*) as count FROM production");
+                $result = $conn->query("SELECT COUNT(*) as count FROM production_history");
                 $count = $result->fetch_assoc()['count'];
-                echo $count;
+                echo $count ? $count : "0";
             } catch (Exception $e) {
                 echo "0";
             }
@@ -67,9 +67,9 @@
         <h3>
             <?php
             try {
-                $result = $conn->query("SELECT COUNT(*) as count FROM prices");
+                $result = $conn->query("SELECT COUNT(*) as count FROM price_history");
                 $count = $result->fetch_assoc()['count'];
-                echo $count;
+                echo $count ? $count : "0";
             } catch (Exception $e) {
                 echo "0";
             }
@@ -138,4 +138,3 @@
 </div>
 
 <?php include 'templates/footer.php'; ?>
-
