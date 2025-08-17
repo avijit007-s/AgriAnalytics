@@ -377,7 +377,7 @@ $locations = $conn->query("SELECT location_id, district_name, division_name FROM
             <div>
                 <input type="text" id="searchInput" placeholder="Search records..." 
                        style="padding: 8px; border: 1px solid #ddd; border-radius: 5px;">
-                <button onclick="filterTable()" class="btn btn-primary" style="margin-left: 10px;"><i class="fas fa-search"></i> Search</button>
+                <button onclick="searchRecords()" class="btn btn-primary" style="margin-left: 10px;"><i class="fas fa-search"></i> Search</button>
                 <button onclick="exportTableToCSV('weatherTable', 'weather_data.csv')" class="btn btn-success">
                     <i class="fas fa-download"></i> Export CSV
                 </button>
@@ -440,7 +440,7 @@ $locations = $conn->query("SELECT location_id, district_name, division_name FROM
                             echo "<td>";
                             echo "<a href='weather_data.php?edit=" . $row['weather_id'] . "' class='btn btn-warning' style='margin-right: 5px;'>";
                             echo "<i class='fas fa-edit'></i> Edit</a>";
-                            echo "<form method='POST' style='display: inline;' onsubmit='return confirmDelete(\"Are you sure you want to delete this record?\")'>";
+                            echo "<form method='POST' style='display: inline;' onsubmit='return confirm(\"Are you sure you want to delete this record?\")'>";
                             echo "<input type='hidden' name='action' value='delete'>";
                             echo "<input type='hidden' name='weather_id' value='" . $row['weather_id'] . "'>";
                             echo "<button type='submit' class='btn btn-danger'><i class='fas fa-trash'></i> Delete</button>";
@@ -490,80 +490,142 @@ $locations = $conn->query("SELECT location_id, district_name, division_name FROM
     </div>
 </div>
 
+<?php
+// Prepare data for charts
+$trend_query = "SELECT DATE_FORMAT(date, '%Y-%m') as month_year, 
+                       AVG(rainfall_mm) as avg_rainfall, 
+                       AVG(temperature_celsius) as avg_temp 
+                FROM weather_history 
+                GROUP BY DATE_FORMAT(date, '%Y-%m') 
+                ORDER BY date";
+$trend_result = $conn->query($trend_query);
+$trend_labels = [];
+$rainfall_data = [];
+$temp_data = [];
+if ($trend_result->num_rows > 0) {
+    while ($row = $trend_result->fetch_assoc()) {
+        $trend_labels[] = $row['month_year'];
+        $rainfall_data[] = round($row['avg_rainfall'], 1);
+        $temp_data[] = round($row['avg_temp'], 1);
+    }
+} else {
+    // Fallback data
+    $trend_labels = ['2025-01', '2025-02', '2025-03', '2025-04', '2025-05', '2025-06'];
+    $rainfall_data = [12.5, 8.2, 15.7, 22.1, 45.3, 78.9];
+    $temp_data = [18.5, 22.3, 26.1, 28.7, 30.2, 29.8];
+}
+
+$location_query = "SELECT l.district_name, 
+                          AVG(wh.rainfall_mm) as avg_rainfall, 
+                          AVG(wh.temperature_celsius) as avg_temp 
+                   FROM weather_history wh 
+                   JOIN locations l ON wh.location_id = l.location_id 
+                   GROUP BY l.location_id, l.district_name 
+                   ORDER BY avg_rainfall DESC";
+$location_result = $conn->query($location_query);
+$location_labels = [];
+$location_rainfall = [];
+$location_temp = [];
+if ($location_result->num_rows > 0) {
+    while ($row = $location_result->fetch_assoc()) {
+        $location_labels[] = $row['district_name'];
+        $location_rainfall[] = round($row['avg_rainfall'], 1);
+        $location_temp[] = round($row['avg_temp'], 1);
+    }
+} else {
+    // Fallback data
+    $location_labels = ['Dhaka', 'Chittagong', 'Rajshahi'];
+    $location_rainfall = [35.2, 42.8, 28.5];
+    $location_temp = [26.5, 28.2, 25.8];
+}
+
+$monthly_query = "SELECT MONTH(date) as month_num, 
+                         MONTHNAME(date) as month_name, 
+                         AVG(rainfall_mm) as avg_rainfall, 
+                         AVG(temperature_celsius) as avg_temp 
+                  FROM weather_history 
+                  GROUP BY MONTH(date), MONTHNAME(date) 
+                  ORDER BY MONTH(date)";
+$monthly_result = $conn->query($monthly_query);
+$monthly_labels = [];
+$monthly_rainfall = [];
+$monthly_temp = [];
+if ($monthly_result->num_rows > 0) {
+    while ($row = $monthly_result->fetch_assoc()) {
+        $monthly_labels[] = substr($row['month_name'], 0, 3);
+        $monthly_rainfall[] = round($row['avg_rainfall'], 1);
+        $monthly_temp[] = round($row['avg_temp'], 1);
+    }
+} else {
+    // Fallback data
+    $monthly_labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'];
+    $monthly_rainfall = [15.2, 18.5, 25.7, 45.2, 78.9, 125.3];
+    $monthly_temp = [20.5, 23.2, 26.8, 29.1, 30.5, 29.8];
+}
+?>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-// Initialize search functionality
-searchTable('searchInput', 'weatherTable');
+// Search functionality
+function searchRecords() {
+    const input = document.getElementById('searchInput');
+    const filter = input.value.toUpperCase();
+    const table = document.getElementById('weatherTable');
+    const tr = table.getElementsByTagName('tr');
+
+    for (let i = 1; i < tr.length; i++) {
+        let td = tr[i].getElementsByTagName('td');
+        let found = false;
+        
+        for (let j = 0; j < td.length - 1; j++) {
+            if (td[j] && td[j].innerHTML.toUpperCase().indexOf(filter) > -1) {
+                found = true;
+                break;
+            }
+        }
+        
+        tr[i].style.display = found ? '' : 'none';
+    }
+}
+
+// Real-time search
+document.getElementById('searchInput').addEventListener('keyup', searchRecords);
+
+// CSV Export function
+function exportTableToCSV(tableId, filename) {
+    const table = document.getElementById(tableId);
+    const rows = table.querySelectorAll('tr');
+    let csv = [];
+    
+    for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        const cols = row.querySelectorAll('td, th');
+        let csvRow = [];
+        
+        for (let j = 0; j < cols.length - 1; j++) { // Exclude actions column
+            csvRow.push('"' + cols[j].innerText.replace(/"/g, '""') + '"');
+        }
+        
+        csv.push(csvRow.join(','));
+    }
+    
+    const csvContent = csv.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    window.URL.revokeObjectURL(url);
+}
 
 // Weather Analytics Charts
 document.addEventListener('DOMContentLoaded', function() {
-    // Check if Chart.js is loaded
     if (typeof Chart === 'undefined') {
         console.error('Chart.js library not loaded');
         return;
     }
 
-    <?php
-    // Get weather trends over time
-    $trend_query = "SELECT DATE_FORMAT(date, '%Y-%m') as month_year, 
-                           AVG(rainfall_mm) as avg_rainfall, 
-                           AVG(temperature_celsius) as avg_temp 
-                    FROM weather_history 
-                    GROUP BY DATE_FORMAT(date, '%Y-%m') 
-                    ORDER BY date";
-    $trend_result = $conn->query($trend_query);
-    $trend_labels = [];
-    $rainfall_data = [];
-    $temp_data = [];
-    if ($trend_result && $trend_result->num_rows > 0) {
-        while ($row = $trend_result->fetch_assoc()) {
-            $trend_labels[] = $row['month_year'];
-            $rainfall_data[] = round($row['avg_rainfall'], 1);
-            $temp_data[] = round($row['avg_temp'], 1);
-        }
-    }
-
-    // Get weather by location
-    $location_query = "SELECT l.district_name, 
-                              AVG(wh.rainfall_mm) as avg_rainfall, 
-                              AVG(wh.temperature_celsius) as avg_temp 
-                       FROM weather_history wh 
-                       JOIN locations l ON wh.location_id = l.location_id 
-                       GROUP BY l.location_id, l.district_name 
-                       ORDER BY avg_rainfall DESC";
-    $location_result = $conn->query($location_query);
-    $location_labels = [];
-    $location_rainfall = [];
-    $location_temp = [];
-    if ($location_result && $location_result->num_rows > 0) {
-        while ($row = $location_result->fetch_assoc()) {
-            $location_labels[] = $row['district_name'];
-            $location_rainfall[] = round($row['avg_rainfall'], 1);
-            $location_temp[] = round($row['avg_temp'], 1);
-        }
-    }
-
-    // Get monthly patterns
-    $monthly_query = "SELECT MONTH(date) as month_num, 
-                             MONTHNAME(date) as month_name,
-                             AVG(rainfall_mm) as avg_rainfall, 
-                             AVG(temperature_celsius) as avg_temp 
-                      FROM weather_history 
-                      GROUP BY MONTH(date), MONTHNAME(date) 
-                      ORDER BY MONTH(date)";
-    $monthly_result = $conn->query($monthly_query);
-    $monthly_labels = [];
-    $monthly_rainfall = [];
-    $monthly_temp = [];
-    if ($monthly_result && $monthly_result->num_rows > 0) {
-        while ($row = $monthly_result->fetch_assoc()) {
-            $monthly_labels[] = substr($row['month_name'], 0, 3);
-            $monthly_rainfall[] = round($row['avg_rainfall'], 1);
-            $monthly_temp[] = round($row['avg_temp'], 1);
-        }
-    }
-    ?>
-
-    // Chart data from PHP
     const trendLabels = <?php echo json_encode($trend_labels); ?>;
     const rainfallData = <?php echo json_encode($rainfall_data); ?>;
     const tempData = <?php echo json_encode($temp_data); ?>;
@@ -574,25 +636,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const monthlyRainfall = <?php echo json_encode($monthly_rainfall); ?>;
     const monthlyTemp = <?php echo json_encode($monthly_temp); ?>;
 
-    // Chart options
-    const chartOptions = {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: {
-                position: 'top'
-            }
-        },
-        scales: {
-            y: {
-                beginAtZero: true
-            }
-        }
-    };
-
-    // Temperature & Rainfall Trends Chart
+    // Trend Chart
     const trendCtx = document.getElementById('weatherTrendChart');
-    if (trendCtx && trendLabels.length > 0) {
+    if (trendCtx) {
         new Chart(trendCtx, {
             type: 'line',
             data: {
@@ -603,23 +649,40 @@ document.addEventListener('DOMContentLoaded', function() {
                     borderColor: '#4facfe',
                     backgroundColor: 'rgba(79, 172, 254, 0.1)',
                     fill: true,
-                    tension: 0.4
+                    tension: 0.4,
+                    yAxisID: 'y'
                 }, {
                     label: 'Temperature (°C)',
                     data: tempData,
                     borderColor: '#00f2fe',
                     backgroundColor: 'rgba(0, 242, 254, 0.1)',
                     fill: true,
-                    tension: 0.4
+                    tension: 0.4,
+                    yAxisID: 'y1'
                 }]
             },
-            options: chartOptions
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: { display: true, text: 'Rainfall (mm)' }
+                    },
+                    y1: {
+                        beginAtZero: true,
+                        position: 'right',
+                        title: { display: true, text: 'Temperature (°C)' },
+                        grid: { drawOnChartArea: false }
+                    }
+                }
+            }
         });
     }
 
-    // Average Weather by Location Chart
+    // Location Chart
     const locationCtx = document.getElementById('weatherLocationChart');
-    if (locationCtx && locationLabels.length > 0) {
+    if (locationCtx) {
         new Chart(locationCtx, {
             type: 'bar',
             data: {
@@ -629,22 +692,39 @@ document.addEventListener('DOMContentLoaded', function() {
                     data: locationRainfall,
                     backgroundColor: 'rgba(79, 172, 254, 0.7)',
                     borderColor: '#4facfe',
-                    borderWidth: 1
+                    borderWidth: 1,
+                    yAxisID: 'y'
                 }, {
                     label: 'Avg Temperature (°C)',
                     data: locationTemp,
                     backgroundColor: 'rgba(0, 242, 254, 0.7)',
                     borderColor: '#00f2fe',
-                    borderWidth: 1
+                    borderWidth: 1,
+                    yAxisID: 'y1'
                 }]
             },
-            options: chartOptions
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: { display: true, text: 'Rainfall (mm)' }
+                    },
+                    y1: {
+                        beginAtZero: true,
+                        position: 'right',
+                        title: { display: true, text: 'Temperature (°C)' },
+                        grid: { drawOnChartArea: false }
+                    }
+                }
+            }
         });
     }
 
-    // Monthly Weather Pattern Chart
+    // Monthly Chart
     const monthlyCtx = document.getElementById('monthlyWeatherChart');
-    if (monthlyCtx && monthlyLabels.length > 0) {
+    if (monthlyCtx) {
         new Chart(monthlyCtx, {
             type: 'bar',
             data: {
@@ -654,711 +734,43 @@ document.addEventListener('DOMContentLoaded', function() {
                     data: monthlyRainfall,
                     backgroundColor: 'rgba(79, 172, 254, 0.7)',
                     borderColor: '#4facfe',
-                    borderWidth: 1
+                    borderWidth: 1,
+                    yAxisID: 'y'
                 }, {
                     label: 'Avg Temperature (°C)',
                     data: monthlyTemp,
                     backgroundColor: 'rgba(0, 242, 254, 0.7)',
                     borderColor: '#00f2fe',
-                    borderWidth: 1
+                    borderWidth: 1,
+                    yAxisID: 'y1'
                 }]
             },
-            options: chartOptions
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: { display: true, text: 'Rainfall (mm)' }
+                    },
+                    y1: {
+                        beginAtZero: true,
+                        position: 'right',
+                        title: { display: true, text: 'Temperature (°C)' },
+                        grid: { drawOnChartArea: false }
+                    }
+                }
+            }
         });
     }
 
-    // If no data available, show message
+    // If no data, show message
     if (trendLabels.length === 0) {
         document.querySelectorAll('.chart-container').forEach(container => {
             container.innerHTML = '<div style="text-align: center; padding: 50px; color: #666;"><i class="fas fa-chart-line" style="font-size: 48px; margin-bottom: 15px; opacity: 0.3;"></i><br>No weather data available<br><small>Add some weather records to see charts</small></div>';
         });
     }
 });
-            $location_temp[] = round($row['avg_temp'], 1);
-        }
-    }
-
-    // Get monthly patterns
-    $monthly_query = "SELECT MONTH(date) as month, 
-                             AVG(rainfall_mm) as avg_rainfall, 
-                             AVG(temperature_celsius) as avg_temp 
-                      FROM weather_history 
-                      GROUP BY MONTH(date) 
-                      ORDER BY MONTH(date)";
-    $monthly_result = $conn->query($monthly_query);
-    $month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    $monthly_labels = [];
-    $monthly_rainfall = [];
-    $monthly_temp = [];
-    if ($monthly_result && $monthly_result->num_rows > 0) {
-        while ($row = $monthly_result->fetch_assoc()) {
-            $monthly_labels[] = $month_names[$row['month'] - 1];
-            $monthly_rainfall[] = round($row['avg_rainfall'], 1);
-            $monthly_temp[] = round($row['avg_temp'], 1);
-        }
-    }
-    ?>
-
-    const trendLabels = <?php echo json_encode($trend_labels); ?>;
-    const rainfallData = <?php echo json_encode($rainfall_data); ?>;
-    const tempData = <?php echo json_encode($temp_data); ?>;
-    const locationLabels = <?php echo json_encode($location_labels); ?>;
-    const locationRainfall = <?php echo json_encode($location_rainfall); ?>;
-    const locationTemp = <?php echo json_encode($location_temp); ?>;
-    const monthlyLabels = <?php echo json_encode($monthly_labels); ?>;
-    const monthlyRainfall = <?php echo json_encode($monthly_rainfall); ?>;
-    const monthlyTemp = <?php echo json_encode($monthly_temp); ?>;
-                    position: 'left',
-                    title: {
-                        display: true,
-                        text: 'Rainfall (mm)'
-                    }
-                },
-                y1: {
-                    type: 'linear',
-                    display: true,
-                    position: 'right',
-                    title: {
-                        display: true,
-                        text: 'Temperature (°C)'
-                    },
-                    grid: {
-                        drawOnChartArea: false,
-                    }
-                }
-            },
-            plugins: {
-                title: {
-                    display: true,
-                    text: 'Weather Trends Over Time'
-                }
-            }
-        }
-    });
-
-    // Weather by Location Chart
-    const locationCtx = document.getElementById('weatherLocationChart').getCont            labels: locationLabels,
-            datasets: [{
-                label: "Average Rainfall (mm)",
-                data: locationRainfall,
-                backgroundColor: "#36A2EB",
-                yAxisID: "y"
-            }, {
-                label: "Average Temperature (°C)",
-                data: locationTemp,
-                backgroundColor: "#FF6384",
-                yAxisID: "y1"
-            }]       options: {
-            responsive: true,
-            scales: {
-                y: {
-                    type: 'linear',
-                    display: true,
-                    position: 'left',
-                    title: {
-                        display: true,
-                        text: 'Rainfall (mm)'
-                    }
-                },
-                y1: {
-                    type: 'linear',
-                    display: true,
-                    position: 'right',
-                    title: {
-                        display: true,
-                        text: 'Temperature (°C)'
-                    },
-                    grid: {
-                        drawOnChartArea: false,
-                    }
-                }
-            },
-            plugins: {
-                title: {
-                    display: true,
-                    text: 'Average Weather Conditions by Location'
-                }
-            }
-        }
-    });
-
-    // Monthly Weather P    // Weather Trend Chart
-    const trendCtx = document.getElementById("weatherTrendChart").getContext("2d");
-    new Chart(trendCtx, {
-        type: "line",
-        data:             labels: monthlyLabels,
-            datasets: [{
-                label: "Average Rainfall (mm)",
-                data: monthlyRainfall,
-                borderColor: "#36A2EB",
-                backgroundColor: "rgba(54, 162, 235, 0.2)",
-                fill: true,
-                yAxisID: "y"
-            }, {
-                label: "Average Temperature (°C)",
-                data: monthlyTemp,
-                borderColor: "#FF6384",
-                backgroundColor: "rgba(255, 99, 132, 0.2)",
-                fill: true,
-                yAxisID: "y1"
-            }] true,
-            },
-            plugins: {
-                title: {
-                    display: true,
-                    text: 'Monthly Weather Patterns'
-                }
-            }
-        }
-    });
-});
-</script>
-
-
-<button onclick="downloadPDF()" class="pdf-download-btn">
-    <i class="fas fa-file-pdf"></i> Download PDF
-</button>
-
-<script>
-// Download PDF function
-function downloadPDF() {
-    const year = document.getElementById('year') ? document.getElementById('year').value : new Date().getFullYear();
-    const product = document.getElementById('product') ? document.getElementById('product').value : '';
-    
-    let url = 'pdf_export.php?page=weather&year=' + year;
-    if (product) url += '&product=' + product;
-    
-    window.open(url, '_blank');
-}    </div>
-
-    <!-- Weather Analytics Section -->
-    <div class="weather-card card" style="margin-top: 30px;">
-        <div class="card-header">
-            <h3 class="card-title">
-                <i class="fas fa-chart-line"></i> Weather Analytics
-            </h3>
-        </div>
-        
-        <div class="row" style="margin: 20px 0;">
-            <div class="col-md-6">
-                <div class="chart-container">
-                    <h4><i class="fas fa-chart-line"></i> Temperature & Rainfall Trends</h4>
-                    <canvas id="weatherTrendChart" width="400" height="200"></canvas>
-                </div>
-            </div>
-            <div class="col-md-6">
-                <div class="chart-container">
-                    <h4><i class="fas fa-map-marker-alt"></i> Average Weather by Location</h4>
-                    <canvas id="weatherLocationChart" width="400" height="200"></canvas>
-                </div>
-            </div>
-        </div>
-        
-        <div class="row" style="margin: 20px 0;">
-            <div class="col-md-12">
-                <div class="chart-container">
-                    <h4><i class="fas fa-calendar-alt"></i> Monthly Weather Pattern</h4>
-                    <canvas id="monthlyWeatherChart" width="800" height="300"></canvas>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<?php
-// Prepare data for weather charts
-$weather_trend_data = $conn->query("
-    SELECT DATE_FORMAT(date, '%Y-%m') as month, 
-           AVG(temperature_celsius) as avg_temp, 
-           AVG(rainfall_mm) as avg_rainfall 
-    FROM weather_history 
-    GROUP BY DATE_FORMAT(date, '%Y-%m') 
-    ORDER BY month
-");
-
-$weather_location_data = $conn->query("
-    SELECT l.district_name, 
-           AVG(wh.temperature_celsius) as avg_temp, 
-           AVG(wh.rainfall_mm) as avg_rainfall 
-    FROM weather_history wh 
-    JOIN locations l ON wh.location_id = l.location_id 
-    GROUP BY l.district_name
-");
-
-$monthly_pattern_data = $conn->query("
-    SELECT MONTH(date) as month, 
-           AVG(temperature_celsius) as avg_temp, 
-           AVG(rainfall_mm) as avg_rainfall 
-    FROM weather_history 
-    GROUP BY MONTH(date) 
-    ORDER BY month
-");
-?>
-
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Prepare weather trend data
-    const weatherTrendLabels = [];
-    const weatherTrendTemp = [];
-    const weatherTrendRainfall = [];
-    
-    <?php
-    if ($weather_trend_data->num_rows > 0) {
-        while ($row = $weather_trend_data->fetch_assoc()) {
-            echo "weatherTrendLabels.push('" . $row['month'] . "');\n";
-            echo "weatherTrendTemp.push(" . ($row['avg_temp'] ? $row['avg_temp'] : 0) . ");\n";
-            echo "weatherTrendRainfall.push(" . ($row['avg_rainfall'] ? $row['avg_rainfall'] : 0) . ");\n";
-        }
-    } else {
-        // Fallback sample data
-        echo "weatherTrendLabels.push('2024-01', '2024-02', '2024-03', '2024-04', '2024-05', '2024-06');\n";
-        echo "weatherTrendTemp.push(18.5, 22.3, 26.1, 28.7, 30.2, 29.8);\n";
-        echo "weatherTrendRainfall.push(12.5, 8.2, 15.7, 22.1, 45.3, 78.9);\n";
-    }
-    ?>
-
-    // Weather Trend Chart
-    const weatherTrendCtx = document.getElementById('weatherTrendChart').getContext('2d');
-    new Chart(weatherTrendCtx, {
-        type: 'line',
-        data: {
-            labels: weatherTrendLabels,
-            datasets: [{
-                label: 'Temperature (°C)',
-                data: weatherTrendTemp,
-                borderColor: '#ff6b6b',
-                backgroundColor: 'rgba(255, 107, 107, 0.1)',
-                yAxisID: 'y'
-            }, {
-                label: 'Rainfall (mm)',
-                data: weatherTrendRainfall,
-                borderColor: '#4ecdc4',
-                backgroundColor: 'rgba(78, 205, 196, 0.1)',
-                yAxisID: 'y1'
-            }]
-        },
-        options: {
-            responsive: true,
-            scales: {
-                y: {
-                    type: 'linear',
-                    display: true,
-                    position: 'left',
-                    title: {
-                        display: true,
-                        text: 'Temperature (°C)'
-                    }
-                },
-                y1: {
-                    type: 'linear',
-                    display: true,
-                    position: 'right',
-                    title: {
-                        display: true,
-                        text: 'Rainfall (mm)'
-                    },
-                    grid: {
-                        drawOnChartArea: false,
-                    },
-                }
-            }
-        }
-    });
-
-    // Prepare weather location data
-    const weatherLocationLabels = [];
-    const weatherLocationTemp = [];
-    const weatherLocationRainfall = [];
-    
-    <?php
-    $weather_location_data->data_seek(0);
-    if ($weather_location_data->num_rows > 0) {
-        while ($row = $weather_location_data->fetch_assoc()) {
-            echo "weatherLocationLabels.push('" . $row['district_name'] . "');\n";
-            echo "weatherLocationTemp.push(" . ($row['avg_temp'] ? $row['avg_temp'] : 0) . ");\n";
-            echo "weatherLocationRainfall.push(" . ($row['avg_rainfall'] ? $row['avg_rainfall'] : 0) . ");\n";
-        }
-    } else {
-        // Fallback sample data
-        echo "weatherLocationLabels.push('Dhaka', 'Chittagong', 'Rajshahi', 'Sylhet', 'Barisal');\n";
-        echo "weatherLocationTemp.push(26.5, 28.2, 25.8, 24.9, 27.1);\n";
-        echo "weatherLocationRainfall.push(35.2, 42.8, 28.5, 55.7, 48.3);\n";
-    }
-    ?>
-
-    // Weather Location Chart
-    const weatherLocationCtx = document.getElementById('weatherLocationChart').getContext('2d');
-    new Chart(weatherLocationCtx, {
-        type: 'bar',
-        data: {
-            labels: weatherLocationLabels,
-            datasets: [{
-                label: 'Avg Temperature (°C)',
-                data: weatherLocationTemp,
-                backgroundColor: 'rgba(255, 107, 107, 0.8)',
-                borderColor: '#ff6b6b',
-                borderWidth: 1
-            }, {
-                label: 'Avg Rainfall (mm)',
-                data: weatherLocationRainfall,
-                backgroundColor: 'rgba(78, 205, 196, 0.8)',
-                borderColor: '#4ecdc4',
-                borderWidth: 1
-            }]
-        },
-        options: {
-            responsive: true,
-            scales: {
-                y: {
-                    beginAtZero: true
-                }
-            }
-        }
-    });
-
-    // Prepare monthly pattern data
-    const monthlyPatternLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const monthlyPatternTemp = new Array(12).fill(0);
-    const monthlyPatternRainfall = new Array(12).fill(0);
-    
-    <?php
-    $monthly_pattern_data->data_seek(0);
-    if ($monthly_pattern_data->num_rows > 0) {
-        while ($row = $monthly_pattern_data->fetch_assoc()) {
-            $month_index = $row['month'] - 1;
-            echo "monthlyPatternTemp[$month_index] = " . ($row['avg_temp'] ? $row['avg_temp'] : 0) . ";\n";
-            echo "monthlyPatternRainfall[$month_index] = " . ($row['avg_rainfall'] ? $row['avg_rainfall'] : 0) . ";\n";
-        }
-    } else {
-        // Fallback sample data
-        echo "monthlyPatternTemp = [20.5, 23.2, 26.8, 29.1, 30.5, 29.8, 28.9, 28.7, 27.5, 25.2, 22.8, 21.1];\n";
-        echo "monthlyPatternRainfall = [15.2, 18.5, 25.7, 45.2, 78.9, 125.3, 165.7, 142.8, 98.5, 52.3, 28.7, 19.8];\n";
-    }
-    ?>
-
-    // Monthly Weather Pattern Chart
-    const monthlyWeatherCtx = document.getElementById('monthlyWeatherChart').getContext('2d');
-    new Chart(monthlyWeatherCtx, {
-        type: 'line',
-        data: {
-            labels: monthlyPatternLabels,
-            datasets: [{
-                label: 'Temperature (°C)',
-                data: monthlyPatternTemp,
-                borderColor: '#ff6b6b',
-                backgroundColor: 'rgba(255, 107, 107, 0.1)',
-                fill: true,
-                tension: 0.4
-            }, {
-                label: 'Rainfall (mm)',
-                data: monthlyPatternRainfall,
-                borderColor: '#4ecdc4',
-                backgroundColor: 'rgba(78, 205, 196, 0.1)',
-                fill: true,
-                tension: 0.4,
-                yAxisID: 'y1'
-            }]
-        },
-        options: {
-            responsive: true,
-            scales: {
-                y: {
-                    type: 'linear',
-                    display: true,
-                    position: 'left',
-                    title: {
-                        display: true,
-                        text: 'Temperature (°C)'
-                    }
-                },
-                y1: {
-                    type: 'linear',
-                    display: true,
-                    position: 'right',
-                    title: {
-                        display: true,
-                        text: 'Rainfall (mm)'
-                    },
-                    grid: {
-                        drawOnChartArea: false,
-                    },
-                }
-            }
-        }
-    });
-});
 </script>
 
 <?php include 'templates/footer.php'; ?>
-
-<script>
-function filterTable() {
-    var input, filter, table, tr, td, i, txtValue;
-    input = document.getElementById("searchInput");
-    filter = input.value.toUpperCase();
-    table = document.getElementById("weatherTable");
-    tr = table.getElementsByTagName("tr");
-    for (i = 0; i < tr.length; i++) {
-        td = tr[i].getElementsByTagName("td")[1]; // Search by Location
-        if (td) {
-            txtValue = td.textContent || td.innerText;
-            if (txtValue.toUpperCase().indexOf(filter) > -1) {
-                tr[i].style.display = "";
-            } else {
-                tr[i].style.display = "none";
-            }
-        }
-    }
-}
-</script>
-
-
-
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-    // Temperature & Rainfall Trends Chart
-    var tempRainfallCtx = document.getElementById("tempRainfallChart").getContext("2d");
-    var tempRainfallChart;
-
-    // Average Weather by Location Chart
-    var avgWeatherLocationCtx = document.getElementById("avgWeatherLocationChart").getContext("2d");
-    var avgWeatherLocationChart;
-
-    // Monthly Weather Pattern Chart
-    var monthlyWeatherCtx = document.getElementById("monthlyWeatherChart").getContext("2d");
-    var monthlyWeatherChart;
-
-    function renderWeatherCharts(data) {
-        // Destroy existing charts if they exist
-        if (tempRainfallChart) tempRainfallChart.destroy();
-        if (avgWeatherLocationChart) avgWeatherLocationChart.destroy();
-        if (monthlyWeatherChart) monthlyWeatherChart.destroy();
-
-        // Process data for Temperature & Rainfall Trends Chart
-        var dates = [];
-        var rainfallData = [];
-        var temperatureData = [];
-
-        data.sort((a, b) => new Date(a.date) - new Date(b.date)); // Sort by date
-
-        data.forEach(function(row) {
-            dates.push(new Date(row.date).toLocaleDateString());
-            rainfallData.push(parseFloat(row.rainfall_mm));
-            temperatureData.push(parseFloat(row.temperature_celsius));
-        });
-
-        tempRainfallChart = new Chart(tempRainfallCtx, {
-            type: "line",
-            data: {
-                labels: dates,
-                datasets: [{
-                    label: "Rainfall (mm)",
-                    data: rainfallData,
-                    borderColor: "#4facfe",
-                    backgroundColor: "rgba(79, 172, 254, 0.2)",
-                    fill: false,
-                    yAxisID: "y-rainfall",
-                },
-                {
-                    label: "Temperature (°C)",
-                    data: temperatureData,
-                    borderColor: "#00f2fe",
-                    backgroundColor: "rgba(0, 242, 254, 0.2)",
-                    fill: false,
-                    yAxisID: "y-temperature",
-                }, ],
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: "top",
-                    },
-                    title: {
-                        display: true,
-                        text: "Temperature & Rainfall Trends",
-                    },
-                },
-                scales: {
-                    "y-rainfall": {
-                        type: "linear",
-                        position: "left",
-                        beginAtZero: true,
-                        title: {
-                            display: true,
-                            text: "Rainfall (mm)",
-                        },
-                    },
-                    "y-temperature": {
-                        type: "linear",
-                        position: "right",
-                        beginAtZero: true,
-                        title: {
-                            display: true,
-                            text: "Temperature (°C)",
-                        },
-                        grid: {
-                            drawOnChartArea: false,
-                        },
-                    },
-                },
-            },
-        });
-
-        // Process data for Average Weather by Location Chart
-        var locationLabels = [];
-        var avgRainfallByLocation = {};
-        var avgTempByLocation = {};
-        var locationCounts = {};
-
-        data.forEach(function(row) {
-            var locationName = row.district_name + ", " + row.division_name;
-            if (!avgRainfallByLocation[locationName]) {
-                avgRainfallByLocation[locationName] = 0;
-                avgTempByLocation[locationName] = 0;
-                locationCounts[locationName] = 0;
-            }
-            avgRainfallByLocation[locationName] += parseFloat(row.rainfall_mm);
-            avgTempByLocation[locationName] += parseFloat(row.temperature_celsius);
-            locationCounts[locationName]++;
-        });
-
-        for (var loc in avgRainfallByLocation) {
-            locationLabels.push(loc);
-            avgRainfallByLocation[loc] /= locationCounts[loc];
-            avgTempByLocation[loc] /= locationCounts[loc];
-        }
-
-        avgWeatherLocationChart = new Chart(avgWeatherLocationCtx, {
-            type: "bar",
-            data: {
-                labels: locationLabels,
-                datasets: [{
-                    label: "Avg Rainfall (mm)",
-                    data: Object.values(avgRainfallByLocation),
-                    backgroundColor: "rgba(79, 172, 254, 0.7)",
-                    borderColor: "rgba(79, 172, 254, 1)",
-                    borderWidth: 1,
-                },
-                {
-                    label: "Avg Temperature (°C)",
-                    data: Object.values(avgTempByLocation),
-                    backgroundColor: "rgba(0, 242, 254, 0.7)",
-                    borderColor: "rgba(0, 242, 254, 1)",
-                    borderWidth: 1,
-                }, ],
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: "top",
-                    },
-                    title: {
-                        display: true,
-                        text: "Average Weather by Location",
-                    },
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        title: {
-                            display: true,
-                            text: "Value",
-                        },
-                    },
-                },
-            },
-        });
-
-        // Process data for Monthly Weather Pattern Chart
-        var monthlyRainfall = {};
-        var monthlyTemperature = {};
-        var monthlyCounts = {};
-
-        data.forEach(function(row) {
-            var month = new Date(row.date).toLocaleString("default", { month: "short" });
-            if (!monthlyRainfall[month]) {
-                monthlyRainfall[month] = 0;
-                monthlyTemperature[month] = 0;
-                monthlyCounts[month] = 0;
-            }
-            monthlyRainfall[month] += parseFloat(row.rainfall_mm);
-            monthlyTemperature[month] += parseFloat(row.temperature_celsius);
-            monthlyCounts[month]++;
-        });
-
-        var monthOrder = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-        var sortedMonths = monthOrder.filter(month => monthlyRainfall.hasOwnProperty(month));
-
-        var monthlyRainfallData = sortedMonths.map(month => monthlyRainfall[month] / monthlyCounts[month]);
-        var monthlyTemperatureData = sortedMonths.map(month => monthlyTemperature[month] / monthlyCounts[month]);
-
-        monthlyWeatherChart = new Chart(monthlyWeatherCtx, {
-            type: "bar",
-            data: {
-                labels: sortedMonths,
-                datasets: [{
-                    label: "Avg Rainfall (mm)",
-                    data: monthlyRainfallData,
-                    backgroundColor: "rgba(79, 172, 254, 0.7)",
-                    borderColor: "rgba(79, 172, 254, 1)",
-                    borderWidth: 1,
-                },
-                {
-                    label: "Avg Temperature (°C)",
-                    data: monthlyTemperatureData,
-                    backgroundColor: "rgba(0, 242, 254, 0.7)",
-                    borderColor: "rgba(0, 242, 254, 1)",
-                    borderWidth: 1,
-                }, ],
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: "top",
-                    },
-                    title: {
-                        display: true,
-                        text: "Monthly Weather Pattern",
-                    },
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        title: {
-                            display: true,
-                            text: "Value",
-                        },
-                    },
-                },
-            },
-        });
-    }
-
-    // Fetch data and render charts on page load
-    document.addEventListener("DOMContentLoaded", function() {
-        fetchWeatherData();
-    });
-
-    function fetchWeatherData() {
-        fetch("api.php?action=get_weather_data")
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    renderWeatherCharts(data.data);
-                } else {
-                    console.error("Error fetching weather data:", data.message);
-                }
-            })
-            .catch(error => console.error("Fetch error:", error));
-    }
-</script>
-
-
-<?php include 'templates/footer.php'; ?>
-
