@@ -9,13 +9,15 @@ if ($_POST) {
                 $product_id = sanitizeInput($_POST['product_id']);
                 $location_id = sanitizeInput($_POST['location_id']);
                 $year = sanitizeInput($_POST['year']);
+                $season = sanitizeInput($_POST['season']);
+                $temperature = sanitizeInput($_POST['temperature']);
                 $acreage = sanitizeInput($_POST['acreage']);
                 $quantity_produced = sanitizeInput($_POST['quantity_produced']);
                 
-                $sql = "INSERT INTO production_history (product_id, location_id, year, acreage, quantity_produced) 
-                        VALUES (?, ?, ?, ?, ?)";
+                $sql = "INSERT INTO production_history (product_id, location_id, year, season, temperature, acreage, quantity_produced) 
+                        VALUES (?, ?, ?, ?, ?, ?, ?)";
                 $stmt = $conn->prepare($sql);
-                $stmt->bind_param("iiidd", $product_id, $location_id, $year, $acreage, $quantity_produced);
+                $stmt->bind_param("iissddd", $product_id, $location_id, $year, $season, $temperature, $acreage, $quantity_produced);
                 
                 if ($stmt->execute()) {
                     $success_message = "Production record added successfully!";
@@ -29,12 +31,14 @@ if ($_POST) {
                 $product_id = sanitizeInput($_POST['product_id']);
                 $location_id = sanitizeInput($_POST['location_id']);
                 $year = sanitizeInput($_POST['year']);
+                $season = sanitizeInput($_POST['season']);
+                $temperature = sanitizeInput($_POST['temperature']);
                 $acreage = sanitizeInput($_POST['acreage']);
                 $quantity_produced = sanitizeInput($_POST['quantity_produced']);
                 
-                $sql = "UPDATE production_history SET product_id=?, location_id=?, year=?, acreage=?, quantity_produced=? WHERE production_id=?";
+                $sql = "UPDATE production_history SET product_id=?, location_id=?, year=?, season=?, temperature=?, acreage=?, quantity_produced=? WHERE production_id=?";
                 $stmt = $conn->prepare($sql);
-                $stmt->bind_param("iiiddi", $product_id, $location_id, $year, $acreage, $quantity_produced, $production_id);
+                $stmt->bind_param("iissdddi", $product_id, $location_id, $year, $season, $temperature, $acreage, $quantity_produced, $production_id);
                 
                 if ($stmt->execute()) {
                     $success_message = "Production record updated successfully!";
@@ -274,6 +278,23 @@ $locations = $conn->query("SELECT location_id, district_name, division_name FROM
                 </div>
 
                 <div class="form-group">
+                    <label for="season">Season</label>
+                    <select id="season" name="season" class="form-control" required>
+                        <option value="">Select Season</option>
+                        <option value="Spring" <?php echo ($edit_record && isset($edit_record['season']) && $edit_record['season'] == 'Spring') ? 'selected' : ''; ?>>Spring</option>
+                        <option value="Summer" <?php echo ($edit_record && isset($edit_record['season']) && $edit_record['season'] == 'Summer') ? 'selected' : ''; ?>>Summer</option>
+                        <option value="Fall" <?php echo ($edit_record && isset($edit_record['season']) && $edit_record['season'] == 'Fall') ? 'selected' : ''; ?>>Fall</option>
+                        <option value="Winter" <?php echo ($edit_record && isset($edit_record['season']) && $edit_record['season'] == 'Winter') ? 'selected' : ''; ?>>Winter</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="temperature">Avg Temperature (°C)</label>
+                    <input type="number" step="0.1" id="temperature" name="temperature" class="form-control" 
+                           value="<?php echo $edit_record && isset($edit_record['temperature']) ? $edit_record['temperature'] : ''; ?>" required>
+                </div>
+
+                <div class="form-group">
                     <label for="acreage">Acreage</label>
                     <input type="number" step="0.01" id="acreage" name="acreage" class="form-control" 
                            value="<?php echo $edit_record ? $edit_record['acreage'] : ''; ?>" required>
@@ -326,6 +347,8 @@ $locations = $conn->query("SELECT location_id, district_name, division_name FROM
                         <th>Product</th>
                         <th>Location</th>
                         <th>Year</th>
+                        <th>Season</th>
+                        <th>Temperature (°C)</th>
                         <th>Acreage</th>
                         <th>Quantity (tons)</th>
                         <th>Yield (tons/acre)</th>
@@ -349,6 +372,8 @@ $locations = $conn->query("SELECT location_id, district_name, division_name FROM
                             echo "<td>" . htmlspecialchars($row['product_name']) . "</td>";
                             echo "<td>" . htmlspecialchars($row['district_name'] . ', ' . $row['division_name']) . "</td>";
                             echo "<td>" . $row['year'] . "</td>";
+                            echo "<td>" . (isset($row['season']) ? htmlspecialchars($row['season']) : 'N/A') . "</td>";
+                            echo "<td>" . (isset($row['temperature']) ? number_format($row['temperature'], 1) : 'N/A') . "</td>";
                             echo "<td>" . number_format($row['acreage'], 2) . "</td>";
                             echo "<td>" . number_format($row['quantity_produced'], 2) . "</td>";
                             echo "<td>" . number_format($yield, 2) . "</td>";
@@ -364,7 +389,7 @@ $locations = $conn->query("SELECT location_id, district_name, division_name FROM
                             echo "</tr>";
                         }
                     } else {
-                        echo "<tr><td colspan='8' style='text-align: center;'>No production records found</td></tr>";
+                        echo "<tr><td colspan='10' style='text-align: center;'>No production records found</td></tr>";
                     }
                     ?>
                 </tbody>
@@ -571,4 +596,3 @@ function getRandomColor() {
 </script>
 
 <?php include 'templates/footer.php'; ?>
-
