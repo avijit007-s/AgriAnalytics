@@ -17,14 +17,14 @@ INSERT INTO products (name, type, variety, sowing_time, transplanting_time, harv
 ('Jute', 'Fiber', 'Tossa', '2024-03-15', NULL, '2024-07-15', 8.00),
 ('Sugarcane', 'Cash Crop', 'Isd 37', '2024-02-01', NULL, '2024-12-01', 3500.00);
 
--- Insert sample production history
-INSERT INTO production_history (product_id, location_id, year, acreage, quantity_produced) VALUES
-(1, 1, 2023, 1500.00, 4500.00),
-(1, 2, 2023, 1200.00, 3600.00),
-(2, 1, 2023, 800.00, 2400.00),
-(3, 3, 2023, 600.00, 12000.00),
-(4, 4, 2023, 400.00, 800.00),
-(5, 5, 2023, 300.00, 15000.00);
+-- Insert sample production history with season and temperature
+INSERT INTO production_history (product_id, location_id, year, season, temperature, acreage, quantity_produced) VALUES
+(1, 1, 2023, 'Spring', 25.5, 1500.00, 4500.00),
+(1, 2, 2023, 'Spring', 26.2, 1200.00, 3600.00),
+(2, 1, 2023, 'Winter', 18.7, 800.00, 2400.00),
+(3, 3, 2023, 'Fall', 22.3, 600.00, 12000.00),
+(4, 4, 2023, 'Summer', 28.1, 400.00, 800.00),
+(5, 5, 2023, 'Winter', 19.4, 300.00, 15000.00);
 
 -- Insert sample price history
 INSERT INTO price_history (product_id, location_id, date, wholesale_price, retail_price) VALUES
@@ -51,4 +51,3 @@ INSERT INTO consumption_data (product_id, location_id, year, month, per_capita_i
 (1, 1, 2023, 3, 26000.00, 2.4, 148.00),
 (2, 1, 2023, 1, 25000.00, 1.8, 120.00),
 (3, 3, 2023, 1, 22000.00, 3.2, 200.00);
-
