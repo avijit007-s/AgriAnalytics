@@ -1,4 +1,3 @@
-
 CREATE TABLE products (
     product_id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
@@ -22,6 +21,8 @@ CREATE TABLE production_history (
     product_id INT NOT NULL,
     location_id INT NOT NULL,
     year INT NOT NULL,
+    season VARCHAR(20),
+    temperature DECIMAL(5, 1),
     acreage DECIMAL(10, 2),
     quantity_produced DECIMAL(10, 2),
     FOREIGN KEY (product_id) REFERENCES products(product_id),
@@ -66,5 +67,3 @@ CREATE TABLE users (
     username VARCHAR(50) NOT NULL UNIQUE,
     password VARCHAR(255) NOT NULL
 );
-
-
