@@ -21,16 +21,7 @@
     <div class="doc-source">
       <pre><code>class PDF extends FPDF
 {
-    protected $col = 0;
-
-    function SetCol($col)
-    {
-        // Move position to a column
-        $this-&gt;col = $col;
-        $x = 10 + $col*65;
-        $this-&gt;SetLeftMargin($x);
-        $this-&gt;SetX($x);
-    }
+   
 
     function AcceptPageBreak()
     {
