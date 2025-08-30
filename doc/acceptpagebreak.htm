@@ -6,7 +6,20 @@
     <link type="text/css" rel="stylesheet" href="../fpdf.css" />
   </head>
   <body>
-  
+    <h1>AcceptPageBreak</h1>
+    <code><b>boolean</b> AcceptPageBreak()</code>
+    <h2>Description</h2>
+    Whenever a page break condition is met, the method is called, and the break
+    is issued or not depending on the returned value. The default implementation
+    returns a value according to the mode selected by SetAutoPageBreak().
+    <br />
+    This method is called automatically and should not be called directly by the
+    application.
+    <h2>Example</h2>
+    The method is overriden in an inherited class in order to obtain a 3 column
+    layout:
+    <div class="doc-source">
+      <pre><code>class PDF extends FPDF
 {
     protected $col = 0;
 
